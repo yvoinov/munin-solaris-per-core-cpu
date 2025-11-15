@@ -16,7 +16,7 @@ ln -s /opt/csw/libexec/munin/plugins/solaris_per_core_cpu /etc/opt/csw/munin/plu
 ```
 Add the lines from the plugins.conf file to your plugins.conf file, for example, `/etc/opt/csw/munin/plugin-conf.d/plugins.conf`.
 
-and restart the Munina node:
+and restart the Munin node:
 ```sh
 svcadm restart cswmuninnode
 ```
