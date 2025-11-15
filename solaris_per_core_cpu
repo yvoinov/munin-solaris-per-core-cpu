@@ -3,29 +3,28 @@
 #
 # Munin plugin for Solaris — per-core CPU usage (user/kernel)
 #
-# Can output either percentages (default) or raw ticks (set env graph_ticks=1)
+# Can output either percentages (default) or raw ticks (set env.graph_ticks=1)
 # Shows per-core CPU activity using cpu_ticks_user/kernel from kstat (instance sys)
 #
 # CONFIGURATION:
-# In /etc/opt/csw/munin/plugin-conf.d/plugins.conf (example):
+# In /etc/opt/csw/munin/plugin-conf.d/plugins.conf:
 #   [solaris_per_core_cpu]
 #   env.interval 2        # update interval, sec (default 1)
 #   env.graph_ticks 0     # 0 = percent (default), 1 = ticks
 #   user root             # must be run as root to access kstat data
-#
+
 use strict;
 use warnings;
 
 my $KSTAT = "/bin/kstat -p cpu:::cpu_ticks_*";
 $ENV{'PATH'} = '/bin:/usr/bin';
 
-my $interval = $ENV{'interval'} || 1;
-my $graph_ticks = $ENV{'graph_ticks'} || 0;  # 0 = show percents, 1 = show ticks
+my $graph_ticks   = $ENV{'graph_ticks'} || 0; # 0 = show percents, 1 = ticks
 my $ticks_per_sec = 100; # typical Solaris tick rate
+my $statfile      = "/var/tmp/munin_solaris_cpu_ticks.dat";
 
 # --- CONFIG MODE ---
 if (@ARGV && $ARGV[0] eq 'config') {
-
     print "graph_title Per-core CPU usage (user/kernel)\n";
     print "graph_category system\n";
     print "graph_args --base 1000 -r --lower-limit 0\n";
@@ -52,7 +51,6 @@ if (@ARGV && $ARGV[0] eq 'config') {
         print "user${cpu}.label cpu${cpu} user\n";
         print "user${cpu}.type GAUGE\n";
         print "user${cpu}.draw LINE1\n";
-
         print "kernel${cpu}.label cpu${cpu} kernel\n";
         print "kernel${cpu}.type GAUGE\n";
         print "kernel${cpu}.draw LINE1\n";
@@ -73,13 +71,43 @@ sub read_kstat_ticks {
     return \%data;
 }
 
-my $begin = read_kstat_ticks();
-sleep $interval;
-my $end = read_kstat_ticks();
+sub read_prev_stat {
+    my %out;
+    return %out unless -s $statfile;
+    open(my $fh, "<", $statfile) or return %out;
+    while (<$fh>) {
+        if (/^(\d+)\s+(user|kernel)\s+(\d+)\s+([\d.]+)/) {
+            $out{$1}{$2} = $3;
+            $out{'_time'} = $4;
+        }
+    }
+    close($fh);
+    return %out;
+}
 
-foreach my $cpu (sort { $a <=> $b } keys %$end) {
-    my $du = ($end->{$cpu}{'user'}   || 0) - ($begin->{$cpu}{'user'}   || 0);
-    my $dk = ($end->{$cpu}{'kernel'} || 0) - ($begin->{$cpu}{'kernel'} || 0);
+sub write_stat {
+    my ($ticks) = @_;
+    my $time = time();
+    open(my $fh, ">", $statfile) or die "cannot write $statfile: $!";
+    foreach my $cpu (sort { $a <=> $b } keys %$ticks) {
+        next if $cpu eq '_time';
+        print $fh "$cpu user $ticks->{$cpu}{user} $time\n";
+        print $fh "$cpu kernel $ticks->{$cpu}{kernel} $time\n";
+    }
+    close($fh);
+}
+
+# --- main ---
+my $curr = read_kstat_ticks();
+my %prev = read_prev_stat();
+
+my $now = time();
+my $dt = $now - ($prev{'_time'} || ($now-1)); # avoid division by zero
+$dt = 1 if $dt <= 0;
+
+foreach my $cpu (sort { $a <=> $b } keys %$curr) {
+    my $du = ($curr->{$cpu}{user}   || 0) - ($prev{$cpu}{user}   || 0);
+    my $dk = ($curr->{$cpu}{kernel} || 0) - ($prev{$cpu}{kernel} || 0);
 
     $du = 0 if $du < 0;
     $dk = 0 if $dk < 0;
@@ -88,9 +116,11 @@ foreach my $cpu (sort { $a <=> $b } keys %$end) {
         print "user${cpu}.value $du\n";
         print "kernel${cpu}.value $dk\n";
     } else {
-        my $pu = sprintf("%.2f", $du * 100 / ($ticks_per_sec * $interval));
-        my $pk = sprintf("%.2f", $dk * 100 / ($ticks_per_sec * $interval));
+        my $pu = sprintf("%.2f", $du * 100 / ($ticks_per_sec * $dt));
+        my $pk = sprintf("%.2f", $dk * 100 / ($ticks_per_sec * $dt));
         print "user${cpu}.value $pu\n";
         print "kernel${cpu}.value $pk\n";
     }
 }
+
+write_stat($curr);
