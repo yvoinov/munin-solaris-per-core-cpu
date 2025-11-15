@@ -26,3 +26,5 @@ The configuration parameters have the following meanings:
 - env.graph_ticks - statistics type; by default (0) it is a percentage; can be switched to the number of CPU cycles for optimization purposes and more accurate core utilization assessment
 
 The plugin works on all Solaris-based platforms.
+
+<img width="623" height="572" alt="изображение" src="https://github.com/user-attachments/assets/6f40eae1-4ea9-4364-b593-e05310b5bd7f" />
