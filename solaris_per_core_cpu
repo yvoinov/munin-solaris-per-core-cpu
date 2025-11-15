@@ -1,0 +1,96 @@
+#!/usr/bin/perl -w
+# -*- perl -*-
+#
+# Munin plugin for Solaris — per-core CPU usage (user/kernel)
+#
+# Can output either percentages (default) or raw ticks (set env graph_ticks=1)
+# Shows per-core CPU activity using cpu_ticks_user/kernel from kstat (instance sys)
+#
+# CONFIGURATION:
+# In /etc/opt/csw/munin/plugin-conf.d/plugins.conf (example):
+#   [solaris_per_core_cpu]
+#   env.interval 2        # update interval, sec (default 1)
+#   env.graph_ticks 0     # 0 = percent (default), 1 = ticks
+#   user root             # must be run as root to access kstat data
+#
+use strict;
+use warnings;
+
+my $KSTAT = "/bin/kstat -p cpu:::cpu_ticks_*";
+$ENV{'PATH'} = '/bin:/usr/bin';
+
+my $interval = $ENV{'interval'} || 1;
+my $graph_ticks = $ENV{'graph_ticks'} || 0;  # 0 = show percents, 1 = show ticks
+my $ticks_per_sec = 100; # typical Solaris tick rate
+
+# --- CONFIG MODE ---
+if (@ARGV && $ARGV[0] eq 'config') {
+
+    print "graph_title Per-core CPU usage (user/kernel)\n";
+    print "graph_category system\n";
+    print "graph_args --base 1000 -r --lower-limit 0\n";
+    print "graph_scale no\n";
+
+    if ($graph_ticks) {
+        print "graph_vlabel delta ticks per interval\n";
+        print "graph_info Shows per-core CPU activity in ticks per interval (user & kernel)\n";
+    } else {
+        print "graph_vlabel % utilization\n";
+        print "graph_info Shows per-core CPU usage as percentage of time spent in user & kernel modes\n";
+    }
+
+    my %cpu_seen;
+    open(my $ks, "$KSTAT |") or die "cannot run kstat: $!";
+    while (<$ks>) {
+        if (/^cpu:(\d+):sys:cpu_ticks_(user|kernel)\s+\d+/) {
+            $cpu_seen{$1} = 1;
+        }
+    }
+    close($ks);
+
+    foreach my $cpu (sort { $a <=> $b } keys %cpu_seen) {
+        print "user${cpu}.label cpu${cpu} user\n";
+        print "user${cpu}.type GAUGE\n";
+        print "user${cpu}.draw LINE1\n";
+
+        print "kernel${cpu}.label cpu${cpu} kernel\n";
+        print "kernel${cpu}.type GAUGE\n";
+        print "kernel${cpu}.draw LINE1\n";
+    }
+    exit 0;
+}
+
+# --- DATA COLLECTION ---
+sub read_kstat_ticks {
+    my %data;
+    open(my $fh, "$KSTAT |") or die "cannot run kstat: $!";
+    while (<$fh>) {
+        if (/^cpu:(\d+):sys:cpu_ticks_(user|kernel)\s+(\d+)/) {
+            $data{$1}{$2} = $3;
+        }
+    }
+    close($fh);
+    return \%data;
+}
+
+my $begin = read_kstat_ticks();
+sleep $interval;
+my $end = read_kstat_ticks();
+
+foreach my $cpu (sort { $a <=> $b } keys %$end) {
+    my $du = ($end->{$cpu}{'user'}   || 0) - ($begin->{$cpu}{'user'}   || 0);
+    my $dk = ($end->{$cpu}{'kernel'} || 0) - ($begin->{$cpu}{'kernel'} || 0);
+
+    $du = 0 if $du < 0;
+    $dk = 0 if $dk < 0;
+
+    if ($graph_ticks) {
+        print "user${cpu}.value $du\n";
+        print "kernel${cpu}.value $dk\n";
+    } else {
+        my $pu = sprintf("%.2f", $du * 100 / ($ticks_per_sec * $interval));
+        my $pk = sprintf("%.2f", $dk * 100 / ($ticks_per_sec * $interval));
+        print "user${cpu}.value $pu\n";
+        print "kernel${cpu}.value $pk\n";
+    }
+}
