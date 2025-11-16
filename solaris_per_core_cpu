@@ -9,7 +9,6 @@
 # CONFIGURATION:
 # In /etc/opt/csw/munin/plugin-conf.d/plugins.conf:
 #   [solaris_per_core_cpu]
-#   env.interval 2        # update interval, sec (default 1)
 #   env.graph_ticks 0     # 0 = percent (default), 1 = ticks
 #   user root             # must be run as root to access kstat data
 
