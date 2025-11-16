@@ -22,7 +22,6 @@ svcadm restart cswmuninnode
 ```
 The configuration parameters have the following meanings:
 
-- env.interval - CPU statistics interval in seconds
 - env.graph_ticks - statistics type; by default (0) it is a percentage; can be switched to the number of CPU cycles for optimization purposes and more accurate core utilization assessment
 
 The plugin works on all Solaris-based platforms.
