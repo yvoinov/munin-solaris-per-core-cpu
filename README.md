@@ -26,4 +26,5 @@ The configuration parameters have the following meanings:
 
 The plugin works on all Solaris-based platforms.
 
-<img width="623" height="572" alt="изображение" src="https://github.com/user-attachments/assets/6f40eae1-4ea9-4364-b593-e05310b5bd7f" />
+<img width="621" height="571" alt="изображение" src="https://github.com/user-attachments/assets/a2b25a97-e042-4d88-b003-0ef4c69d035d" />
+
